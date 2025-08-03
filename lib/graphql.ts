@@ -338,7 +338,7 @@ export async function fetchPendingBatches(): Promise<ResultBatch[]> {
       })
 
       // Filter to only show pending (unvalidated) batches
-      const pendingBatches = batches.filter((batch) => !batch.isValidated)
+      const pendingBatches = batches.filter((batch: any) => !batch.isValidated)
 
       console.log(`🎯 Processed ${batches.length} total batches, ${pendingBatches.length} pending validation`)
       return pendingBatches

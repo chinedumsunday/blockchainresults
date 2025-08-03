@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { CheckCircle, Eye } from "lucide-react"
-import { uploadToIPFS } from "@/lib/ipfs"
+import { uploadToIPFS, fetchFromIPFS } from "@/lib/ipfs"
 
 interface ValidatorPageProps {
   contract: ethers.Contract

@@ -71,7 +71,7 @@ export function LecturerPage({ contract }: LecturerPageProps) {
 
       // Validate results
       for (const result of results) {
-        if (!ethers.isAddress(result.address) || typeof result.score !== "number") {
+        if (!ethers.utils.isAddress(result.address) || typeof result.score !== "number") {
           throw new Error("Invalid result format")
         }
       }

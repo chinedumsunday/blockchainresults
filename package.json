@@ -26,9 +26,9 @@
     "tailwind-merge": "^2.0.0",
     "tailwindcss-animate": "^1.0.7",
     "viem": "^2.7.0",
-    "wagmi": "^2.5.0",
+    "wagmi": "^2.16.1",
     "@wagmi/core": "^2.6.0",
-    "@wagmi/connectors": "^4.1.0"
+    "@wagmi/connectors": "^5.9.1"
   },
   "devDependencies": {
     "@types/node": "^20",

@@ -128,7 +128,7 @@ export async function fetchValidators(): Promise<string[]> {
       console.log("✅ Found validator events:", data.validatorAddeds.length)
 
       const validators = data.validatorAddeds.map((item: any) => item.validator)
-      const uniqueValidators = Array.from(new Set(validators))
+      const uniqueValidators = Array.from(new Set(validators)) as string[]
 
       console.log(`🎯 Extracted ${uniqueValidators.length} unique validators:`, uniqueValidators)
       return uniqueValidators

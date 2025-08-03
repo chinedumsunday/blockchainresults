@@ -28,7 +28,8 @@
     "viem": "^2.7.0",
     "wagmi": "^2.16.1",
     "@wagmi/core": "^2.6.0",
-    "@wagmi/connectors": "^5.9.1"
+    "@wagmi/connectors": "^5.9.1",
+    "ethers": "^6.8.0"
   },
   "devDependencies": {
     "@types/node": "^20",

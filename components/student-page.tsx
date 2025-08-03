@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { GraduationCap } from "lucide-react"
-import { fetchFromIPFS } from "@/lib/utils"
+import { fetchFromIPFS } from "@/lib/ipfs"
 
 interface StudentPageProps {
   contract: ethers.Contract

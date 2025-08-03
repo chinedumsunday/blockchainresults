@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
 import { Upload, FileText, Hash, Cloud } from "lucide-react"
-import { generateMerkleRoot, uploadToIPFS } from "@/lib/utils"
+import { generateMerkleRoot } from "@/lib/utils"
+import { uploadToIPFS } from "@/lib/ipfs"
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi"
 import { parseAbi } from "viem"
 

@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { Upload, FileText } from "lucide-react"
-import { uploadToIPFS, generateMerkleRoot } from "@/lib/utils"
+import { generateMerkleRoot } from "@/lib/utils"
+import { uploadToIPFS } from "@/lib/ipfs"
 
 interface LecturerPageProps {
   contract: ethers.Contract

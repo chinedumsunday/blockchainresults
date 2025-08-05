@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import "./globals.css"
 import { useRef } from "react"
 import { useAccount, useDisconnect, useReadContract, useChainId } from "wagmi"
 import { WalletConnection } from "@/components/wallet-connection"
@@ -35,7 +34,7 @@ export default function Dashboard() {
   const [subgraphInitialized, setSubgraphInitialized] = useState(false)
   const { toast } = useToast()
 
-  useEffect(() => {
+   useEffect(() => {
   function handleClickOutside(event: MouseEvent) {
     if (walletRef.current && !walletRef.current.contains(event.target as Node)) {
       setShowConnectWallet(false)

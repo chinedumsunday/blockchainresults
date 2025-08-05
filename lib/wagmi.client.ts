@@ -1,4 +1,3 @@
-// lib/wagmi.client.ts
 "use client"
 
 import { http, createConfig } from "wagmi"

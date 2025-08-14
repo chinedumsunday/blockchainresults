@@ -53,6 +53,7 @@ A decentralized academic result management platform that enables secure, verifia
 ---
 
 ## 📂 Project Structure
+```
 ├── app/ # Next.js app directory
 ├── components/ # UI components (dashboards, tables, buttons)
 ├── lib/ # Blockchain interaction functions
@@ -62,7 +63,7 @@ A decentralized academic result management platform that enables secure, verifia
 ├── public/ # Static assets
 ├── package.json # Dependencies & scripts
 └── README.md
-
+```
 
 
 ---

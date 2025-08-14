@@ -2,7 +2,6 @@
 
 A decentralized academic result management platform that enables secure, verifiable, and easily accessible student results using **Ethereum smart contracts**, **IPFS** for storage, and **The Graph Protocol** for fast indexing.
 
-![Architecture Diagram](./path-to-architecture-image.png)
 
 ---
 

@@ -2,6 +2,10 @@
 
 import { useState } from "react"
 import { ethers } from "ethers"
+import Papa from "papaparse"
+import * as XLSX from "xlsx"
+import mammoth from "mammoth"
+import * as pdfjsLib from "pdfjs-dist"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -22,43 +26,67 @@ export function LecturerPage({ contract }: LecturerPageProps) {
   const [session, setSession] = useState("")
   const [semester, setSemester] = useState("")
   const [courseCode, setCourseCode] = useState("")
-  const [resultsData, setResultsData] = useState("")
-  const [uploadType, setUploadType] = useState<"json" | "csv">("json")
+  const [resultsData, setResultsData] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const { toast } = useToast()
 
-  const parseResults = (data: string, type: "json" | "csv") => {
-    try {
-      if (type === "json") {
-        return JSON.parse(data)
-      } else {
-        const lines = data.trim().split("\n")
-        const headers = lines[0].split(",").map((h) => h.trim())
-        const results = []
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
 
-        for (let i = 1; i < lines.length; i++) {
-          const values = lines[i].split(",").map((v) => v.trim())
-          const result: any = {}
-          headers.forEach((header, index) => {
-            result[header] = values[index]
-          })
-          results.push({
-            address: result.student || result.address,
-            score: Number.parseInt(result.score),
-          })
-        }
-        return results
+    let results: any[] = []
+
+    if (file.name.endsWith(".csv")) {
+      const text = await file.text()
+      const parsed = Papa.parse(text, { header: true })
+      results = parsed.data.map((row: any) => ({
+        address: row.student || row.address,
+        score: Number(row.score),
+      }))
+    } else if (file.name.endsWith(".xlsx") || file.name.endsWith(".xls")) {
+      const buffer = await file.arrayBuffer()
+      const workbook = XLSX.read(buffer)
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      const json = XLSX.utils.sheet_to_json(sheet)
+      results = json.map((row: any) => ({
+        address: row.student || row.address,
+        score: Number(row.score),
+      }))
+    } else if (file.name.endsWith(".docx")) {
+      const buffer = await file.arrayBuffer()
+      const { value } = await mammoth.extractRawText({ arrayBuffer: buffer })
+      const lines = value.trim().split("\n")
+      for (let i = 1; i < lines.length; i++) {
+        const [address, score] = lines[i].split(/\s+/)
+        results.push({ address, score: Number(score) })
       }
-    } catch (error) {
-      throw new Error("Invalid data format")
+    } else if (file.name.endsWith(".pdf")) {
+      const buffer = await file.arrayBuffer()
+      const pdf = await pdfjsLib.getDocument({ data: buffer }).promise
+      let text = ""
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i)
+        const content = await page.getTextContent()
+        text += content.items.map((item: any) => item.str).join(" ") + "\n"
+      }
+      const lines = text.trim().split("\n")
+      for (let i = 1; i < lines.length; i++) {
+        const [address, score] = lines[i].trim().split(/\s+/)
+        results.push({ address, score: Number(score) })
+      }
+    } else if (file.name.endsWith(".json")) {
+      const text = await file.text()
+      results = JSON.parse(text)
     }
+
+    setResultsData(results)
   }
 
   const uploadResults = async () => {
-    if (!session || !semester || !courseCode || !resultsData) {
+    if (!session || !semester || !courseCode || resultsData.length === 0) {
       toast({
         title: "Missing Information",
-        description: "Please fill in all fields",
+        description: "Please fill in all fields and upload results",
         variant: "destructive",
       })
       return
@@ -66,23 +94,15 @@ export function LecturerPage({ contract }: LecturerPageProps) {
 
     setLoading(true)
     try {
-      // Parse results data
-      const results = parseResults(resultsData, uploadType)
-
-      // Validate results
-      for (const result of results) {
+      for (const result of resultsData) {
         if (!ethers.utils.isAddress(result.address) || typeof result.score !== "number") {
           throw new Error("Invalid result format")
         }
       }
 
-      // Upload to IPFS
-      const ipfsHash = await uploadToIPFS(results)
+      const ipfsHash = await uploadToIPFS(resultsData)
+      const merkleRoot = generateMerkleRoot(resultsData)
 
-      // Generate Merkle root
-      const merkleRoot = generateMerkleRoot(results)
-
-      // Submit to smart contract
       const tx = await contract.uploadResults(session, semester, courseCode, ipfsHash, merkleRoot)
       await tx.wait()
 
@@ -91,11 +111,10 @@ export function LecturerPage({ contract }: LecturerPageProps) {
         description: `Successfully uploaded results for ${courseCode}`,
       })
 
-      // Clear form
       setSession("")
       setSemester("")
       setCourseCode("")
-      setResultsData("")
+      setResultsData([])
     } catch (error) {
       console.error("Error uploading results:", error)
       toast({
@@ -126,21 +145,12 @@ export function LecturerPage({ contract }: LecturerPageProps) {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <Label htmlFor="session" className="text-white">
-                Session
-              </Label>
-              <Input
-                id="session"
-                placeholder="2023/2024"
-                value={session}
-                onChange={(e) => setSession(e.target.value)}
-                className="bg-gray-700 border-gray-600 text-white"
-              />
+              <Label htmlFor="session" className="text-white">Session</Label>
+              <Input value={session} onChange={(e) => setSession(e.target.value)} placeholder="2023/2024"
+                className="bg-gray-700 border-gray-600 text-white" />
             </div>
             <div>
-              <Label htmlFor="semester" className="text-white">
-                Semester
-              </Label>
+              <Label className="text-white">Semester</Label>
               <Select value={semester} onValueChange={setSemester}>
                 <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
                   <SelectValue placeholder="Select semester" />
@@ -152,50 +162,26 @@ export function LecturerPage({ contract }: LecturerPageProps) {
               </Select>
             </div>
             <div>
-              <Label htmlFor="course-code" className="text-white">
-                Course Code
-              </Label>
-              <Input
-                id="course-code"
-                placeholder="CS101"
-                value={courseCode}
-                onChange={(e) => setCourseCode(e.target.value)}
-                className="bg-gray-700 border-gray-600 text-white"
-              />
+              <Label htmlFor="course-code" className="text-white">Course Code</Label>
+              <Input value={courseCode} onChange={(e) => setCourseCode(e.target.value)} placeholder="CS101"
+                className="bg-gray-700 border-gray-600 text-white" />
             </div>
           </div>
 
           <div>
-            <Label htmlFor="upload-type" className="text-white">
-              Upload Format
-            </Label>
-            <Select value={uploadType} onValueChange={(value: "json" | "csv") => setUploadType(value)}>
-              <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-gray-700 border-gray-600">
-                <SelectItem value="json">JSON Format</SelectItem>
-                <SelectItem value="csv">CSV Format</SelectItem>
-              </SelectContent>
-            </Select>
+            <Label className="text-white">Upload Results File</Label>
+            <Input type="file" accept=".csv,.xlsx,.xls,.docx,.pdf,.json"
+              onChange={handleFileUpload}
+              className="bg-gray-700 border-gray-600 text-white" />
           </div>
 
-          <div>
-            <Label htmlFor="results-data" className="text-white">
-              Results Data
-            </Label>
+          {resultsData.length > 0 && (
             <Textarea
-              id="results-data"
-              placeholder={
-                uploadType === "json"
-                  ? '[{"address": "0x123...", "score": 78}, {"address": "0x456...", "score": 85}]'
-                  : "student,score\n0x123...,78\n0x456...,85"
-              }
-              value={resultsData}
-              onChange={(e) => setResultsData(e.target.value)}
-              className="bg-gray-700 border-gray-600 text-white min-h-32"
+              readOnly
+              value={JSON.stringify(resultsData, null, 2)}
+              className="bg-gray-900 border-gray-700 text-white min-h-32"
             />
-          </div>
+          )}
 
           <Button onClick={uploadResults} disabled={loading} className="bg-green-600 hover:bg-green-700">
             {loading ? "Uploading..." : "Upload Results"}

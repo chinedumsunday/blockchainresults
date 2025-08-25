@@ -2,6 +2,10 @@
 
 import { useState, useEffect } from "react"
 import { useAccount } from "wagmi"
+import Papa from "papaparse"
+import * as XLSX from "xlsx"
+import mammoth from "mammoth"
+import * as pdfjsLib from "pdfjs-dist"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -23,8 +27,7 @@ export function LecturerDashboard() {
   const [session, setSession] = useState("")
   const [semester, setSemester] = useState("")
   const [courseCode, setCourseCode] = useState("")
-  const [resultsData, setResultsData] = useState("")
-  const [parsedResults, setParsedResults] = useState<any[]>([])
+  const [resultsData, setResultsData] = useState<any[]>([])
   const [merkleRoot, setMerkleRoot] = useState("")
   const [ipfsHash, setIpfsHash] = useState("")
   const [pastUploads, setPastUploads] = useState<ResultBatch[]>([])
@@ -33,9 +36,7 @@ export function LecturerDashboard() {
 
   // Contract interactions
   const { writeContract, data: hash, isPending } = useWriteContract()
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
-    hash,
-  })
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
 
   // Load lecturer's past uploads
   useEffect(() => {
@@ -46,7 +47,6 @@ export function LecturerDashboard() {
 
   const loadPastUploads = async () => {
     if (!address) return
-
     try {
       setLoadingUploads(true)
       const uploads = await fetchLecturerUploads(address)
@@ -63,93 +63,80 @@ export function LecturerDashboard() {
     }
   }
 
-  const parseResults = () => {
-    try {
-      let results: any[] = []
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
 
-      if (resultsData.trim().startsWith("[")) {
-        // JSON format
-        results = JSON.parse(resultsData)
-      } else {
-        // CSV format
-        const lines = resultsData.trim().split("\n")
-        const headers = lines[0].split(",").map((h) => h.trim())
+    let results: any[] = []
 
-        for (let i = 1; i < lines.length; i++) {
-          const values = lines[i].split(",").map((v) => v.trim())
-          const result: any = {}
-          headers.forEach((header, index) => {
-            result[header] = values[index]
-          })
-          results.push({
-            address: result.address || result.wallet || result.student,
-            score: Number.parseInt(result.score || result.grade),
-            name: result.name || `Student ${i}`,
-          })
-        }
+    if (file.name.endsWith(".csv")) {
+      const text = await file.text()
+      const parsed = Papa.parse(text, { header: true })
+      results = parsed.data.map((row: any) => ({
+        address: row.address || row.wallet || row.student,
+        score: Number(row.score || row.grade),
+        name: row.name || "",
+      }))
+    } else if (file.name.endsWith(".xlsx") || file.name.endsWith(".xls")) {
+      const buffer = await file.arrayBuffer()
+      const workbook = XLSX.read(buffer)
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      const json = XLSX.utils.sheet_to_json(sheet)
+      results = json.map((row: any) => ({
+        address: row.address || row.wallet || row.student,
+        score: Number(row.score || row.grade),
+        name: row.name || "",
+      }))
+    } else if (file.name.endsWith(".docx")) {
+      const buffer = await file.arrayBuffer()
+      const { value } = await mammoth.extractRawText({ arrayBuffer: buffer })
+      const lines = value.trim().split("\n")
+      for (let i = 1; i < lines.length; i++) {
+        const [address, score, name] = lines[i].split(/\s+/)
+        results.push({ address, score: Number(score), name })
       }
-
-      // Validate results
-      const validResults = results.filter((result) => {
-        return (
-          result.address &&
-          result.address.match(/^0x[a-fA-F0-9]{40}$/) &&
-          typeof result.score === "number" &&
-          result.score >= 0 &&
-          result.score <= 100
-        )
-      })
-
-      if (validResults.length === 0) {
-        throw new Error("No valid results found")
+    } else if (file.name.endsWith(".pdf")) {
+      const buffer = await file.arrayBuffer()
+      const pdf = await pdfjsLib.getDocument({ data: buffer }).promise
+      let text = ""
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i)
+        const content = await page.getTextContent()
+        text += content.items.map((item: any) => item.str).join(" ") + "\n"
       }
+      const lines = text.trim().split("\n")
+      for (let i = 1; i < lines.length; i++) {
+        const [address, score, name] = lines[i].trim().split(/\s+/)
+        results.push({ address, score: Number(score), name })
+      }
+    } else if (file.name.endsWith(".json")) {
+      const text = await file.text()
+      results = JSON.parse(text)
+    }
 
-      setParsedResults(validResults)
-
-      // Generate Merkle root
-      const root = generateMerkleRoot(validResults)
+    if (results.length > 0) {
+      setResultsData(results)
+      const root = generateMerkleRoot(results)
       setMerkleRoot(root)
-
-      toast({
-        title: "Success",
-        description: `Parsed ${validResults.length} valid student results`,
-      })
-    } catch (error) {
-      console.error("Parse error:", error)
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to parse results. Check the format.",
-        variant: "destructive",
-      })
+      toast({ title: "Success", description: `Parsed ${results.length} student results` })
     }
   }
 
   const uploadResults = async () => {
-    if (!session || !semester || !courseCode || parsedResults.length === 0) {
+    if (!session || !semester || !courseCode || resultsData.length === 0) {
       toast({
         title: "Error",
-        description: "Please fill in all fields and parse results first",
+        description: "Please fill in all fields and upload results",
         variant: "destructive",
       })
       return
     }
 
     try {
-      // Upload to IPFS first
-      toast({
-        title: "Uploading to IPFS",
-        description: "Please wait while we upload your data...",
-      })
-
-      const hash = await uploadToIPFS(parsedResults)
+      toast({ title: "Uploading to IPFS", description: "Please wait..." })
+      const hash = await uploadToIPFS(resultsData)
       setIpfsHash(hash)
 
-      toast({
-        title: "IPFS Upload Complete",
-        description: `Data uploaded with hash: ${hash}`,
-      })
-
-      // Submit to smart contract
       writeContract({
         address: CONTRACT_ADDRESS,
         abi: CONTRACT_ABI,
@@ -166,36 +153,28 @@ export function LecturerDashboard() {
     }
   }
 
-  // Handle transaction success
+  // Handle success
   useEffect(() => {
     if (isSuccess) {
-      toast({
-        title: "Success",
-        description: "Results uploaded and submitted to blockchain successfully!",
-      })
-      // Reset form
+      toast({ title: "Success", description: "Results uploaded to blockchain" })
       setSession("")
       setSemester("")
       setCourseCode("")
-      setResultsData("")
-      setParsedResults([])
+      setResultsData([])
       setMerkleRoot("")
       setIpfsHash("")
-      // Reload past uploads
-      setTimeout(loadPastUploads, 3000) // Wait for subgraph to index
+      setTimeout(loadPastUploads, 3000)
     }
   }, [isSuccess])
 
-  const getStatusBadge = (upload: ResultBatch) => {
-    if (upload.isValidated) {
-      return <Badge className="bg-green-600 text-white">✓ Validated</Badge>
-    }
-    return (
+  const getStatusBadge = (upload: ResultBatch) =>
+    upload.isValidated ? (
+      <Badge className="bg-green-600 text-white">✓ Validated</Badge>
+    ) : (
       <Badge variant="outline" className="text-yellow-400 border-yellow-400">
-        ⏳ Pending ({upload.validationCount || 0} validations)
+        ⏳ Pending ({upload.validationCount || 0})
       </Badge>
     )
-  }
 
   return (
     <div className="space-y-6">
@@ -212,28 +191,17 @@ export function LecturerDashboard() {
             <Upload className="w-5 h-5 text-green-400" />
             Upload Student Results
           </CardTitle>
-          <CardDescription className="text-gray-400">
-            Upload and submit student results for validation on the blockchain
-          </CardDescription>
+          <CardDescription className="text-gray-400">Upload and submit student results for validation</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <Label htmlFor="session" className="text-white">
-                Academic Session
-              </Label>
-              <Input
-                id="session"
-                placeholder="2023/2024"
-                value={session}
-                onChange={(e) => setSession(e.target.value)}
-                className="bg-gray-700 border-gray-600 text-white"
-              />
+              <Label className="text-white">Academic Session</Label>
+              <Input value={session} onChange={(e) => setSession(e.target.value)} placeholder="2023/2024"
+                className="bg-gray-700 border-gray-600 text-white" />
             </div>
             <div>
-              <Label htmlFor="semester" className="text-white">
-                Semester
-              </Label>
+              <Label className="text-white">Semester</Label>
               <Select value={semester} onValueChange={setSemester}>
                 <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
                   <SelectValue placeholder="Select semester" />
@@ -245,81 +213,61 @@ export function LecturerDashboard() {
               </Select>
             </div>
             <div>
-              <Label htmlFor="course" className="text-white">
-                Course Code
-              </Label>
-              <Input
-                id="course"
-                placeholder="CS101"
-                value={courseCode}
-                onChange={(e) => setCourseCode(e.target.value)}
-                className="bg-gray-700 border-gray-600 text-white"
-              />
+              <Label className="text-white">Course Code</Label>
+              <Input value={courseCode} onChange={(e) => setCourseCode(e.target.value)} placeholder="CS101"
+                className="bg-gray-700 border-gray-600 text-white" />
             </div>
           </div>
 
           <div>
-            <Label htmlFor="results" className="text-white">
-              Results Data (JSON or CSV)
-            </Label>
-            <Textarea
-              id="results"
-              placeholder='JSON: [{"address": "0x123...", "score": 85, "name": "John Doe"}]&#10;CSV: address,score,name&#10;0x123...,85,John Doe'
-              value={resultsData}
-              onChange={(e) => setResultsData(e.target.value)}
-              className="bg-gray-700 border-gray-600 text-white min-h-32"
-            />
+            <Label className="text-white">Upload Results File</Label>
+            <Input type="file" accept=".csv,.xlsx,.xls,.docx,.pdf,.json"
+              onChange={handleFileUpload}
+              className="bg-gray-700 border-gray-600 text-white" />
           </div>
+
+          {resultsData.length > 0 && (
+            <Textarea
+              readOnly
+              value={JSON.stringify(resultsData, null, 2)}
+              className="bg-gray-900 border-gray-700 text-white min-h-32"
+            />
+          )}
 
           <div className="flex gap-2">
             <Button
-              onClick={parseResults}
-              variant="outline"
-              className="border-gray-600 text-gray-300 hover:bg-gray-600"
-              disabled={!resultsData.trim()}
-            >
-              <FileText className="w-4 h-4 mr-2" />
-              Parse & Preview
-            </Button>
-            <Button
               onClick={uploadResults}
-              disabled={isPending || isConfirming || parsedResults.length === 0}
+              disabled={isPending || isConfirming || resultsData.length === 0}
               className="bg-green-600 hover:bg-green-700"
             >
               {isPending ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Confirming...
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Confirming...
                 </>
               ) : isConfirming ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Processing...
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processing...
                 </>
               ) : (
                 <>
-                  <Upload className="w-4 h-4 mr-2" />
-                  Upload to Blockchain
+                  <Upload className="w-4 h-4 mr-2" /> Upload to Blockchain
                 </>
               )}
             </Button>
           </div>
 
-          {/* Merkle Root & IPFS Hash Display */}
           {merkleRoot && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-700 rounded-lg">
               <div>
                 <Label className="text-white flex items-center gap-2">
-                  <Hash className="w-4 h-4" />
-                  Merkle Root
+                  <Hash className="w-4 h-4" /> Merkle Root
                 </Label>
                 <code className="text-xs text-green-400 break-all block mt-1">{merkleRoot}</code>
               </div>
               {ipfsHash && (
                 <div>
                   <Label className="text-white flex items-center gap-2">
-                    <Cloud className="w-4 h-4" />
-                    IPFS Hash
+                    <Cloud className="w-4 h-4" /> IPFS Hash
                   </Label>
                   <code className="text-xs text-blue-400 break-all block mt-1">{ipfsHash}</code>
                 </div>
@@ -329,14 +277,12 @@ export function LecturerDashboard() {
         </CardContent>
       </Card>
 
-      {/* Preview Table */}
-      {parsedResults.length > 0 && (
+      {/* Preview Results */}
+      {resultsData.length > 0 && (
         <Card className="bg-gray-800 border-gray-700 shadow-lg">
           <CardHeader>
-            <CardTitle className="text-white">Preview Results ({parsedResults.length} students)</CardTitle>
-            <CardDescription className="text-gray-400">
-              Review the parsed data before uploading to blockchain
-            </CardDescription>
+            <CardTitle className="text-white">Preview Results ({resultsData.length} students)</CardTitle>
+            <CardDescription className="text-gray-400">Review parsed data before upload</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -345,39 +291,20 @@ export function LecturerDashboard() {
                   <TableHead className="text-gray-300">Student Address</TableHead>
                   <TableHead className="text-gray-300">Name</TableHead>
                   <TableHead className="text-gray-300">Score</TableHead>
-                  <TableHead className="text-gray-300">Grade</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {parsedResults.slice(0, 10).map((result, index) => (
-                  <TableRow key={index} className="border-gray-600">
-                    <TableCell className="text-gray-300 font-mono text-sm">
-                      {result.address?.slice(0, 6)}...{result.address?.slice(-4)}
-                    </TableCell>
+                {resultsData.slice(0, 10).map((result, i) => (
+                  <TableRow key={i} className="border-gray-600">
+                    <TableCell className="text-gray-300">{result.address}</TableCell>
                     <TableCell className="text-gray-300">{result.name}</TableCell>
-                    <TableCell className="text-gray-300 font-bold">{result.score}%</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={
-                          result.score >= 70
-                            ? "text-green-400 border-green-400"
-                            : result.score >= 60
-                              ? "text-blue-400 border-blue-400"
-                              : result.score >= 50
-                                ? "text-yellow-400 border-yellow-400"
-                                : "text-red-400 border-red-400"
-                        }
-                      >
-                        {result.score >= 70 ? "A" : result.score >= 60 ? "B" : result.score >= 50 ? "C" : "F"}
-                      </Badge>
-                    </TableCell>
+                    <TableCell className="text-gray-300">{result.score}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-            {parsedResults.length > 10 && (
-              <p className="text-gray-400 text-sm mt-2">Showing first 10 of {parsedResults.length} results</p>
+            {resultsData.length > 10 && (
+              <p className="text-gray-400 text-sm mt-2">Showing first 10 of {resultsData.length} results</p>
             )}
           </CardContent>
         </Card>
@@ -387,9 +314,7 @@ export function LecturerDashboard() {
       <Card className="bg-gray-800 border-gray-700 shadow-lg">
         <CardHeader>
           <CardTitle className="text-white">Your Upload History</CardTitle>
-          <CardDescription className="text-gray-400">
-            Track your previous result submissions and their validation status
-          </CardDescription>
+          <CardDescription className="text-gray-400">Track your previous result submissions</CardDescription>
         </CardHeader>
         <CardContent>
           {loadingUploads ? (
@@ -420,9 +345,11 @@ export function LecturerDashboard() {
                   <TableRow key={upload.id} className="border-gray-600">
                     <TableCell className="text-gray-300">{upload.session}</TableCell>
                     <TableCell className="text-gray-300">{upload.semester}</TableCell>
-                    <TableCell className="text-gray-300 font-medium">{upload.courseCode}</TableCell>
+                    <TableCell className="text-gray-300">{upload.courseCode}</TableCell>
                     <TableCell className="text-gray-300">{upload.studentsCount}</TableCell>
-                    <TableCell className="text-gray-300">{new Date(upload.uploadDate).toLocaleDateString()}</TableCell>
+                    <TableCell className="text-gray-300">
+                      {new Date(upload.uploadDate).toLocaleDateString()}
+                    </TableCell>
                     <TableCell>{getStatusBadge(upload)}</TableCell>
                   </TableRow>
                 ))}

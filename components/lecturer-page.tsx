@@ -61,6 +61,7 @@ export function LecturerPage({ contract }: LecturerPageProps) {
         results.push({ address, score: Number(score) })
       }
     } else if (file.name.endsWith(".pdf")) {
+      const pdfjsLib = await import("pdfjs-dist")
       const buffer = await file.arrayBuffer()
       const pdf = await pdfjsLib.getDocument({ data: buffer }).promise
       let text = ""

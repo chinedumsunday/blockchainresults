@@ -224,18 +224,13 @@ export function LecturerDashboard() {
             <div className="flex justify-between items-center">
               <Label className="text-white">Upload Results File</Label>
               <Button
-                onClick={() => {
-                  const link = document.createElement("a")
-                  link.href = "/templates/result-template.xlsx"
-                  link.download = "result-template.xlsx"
-                  document.body.appendChild(link)
-                  link.click()
-                  document.body.removeChild(link)
-                }}
+                asChild
                 size="sm"
                 className="bg-green-600 hover:bg-green-700 text-white"
               >
-                Download Template
+                <a href="/templates/result-template.xlsx" download>
+                  Download Template
+                </a>
               </Button>
             </div>
 

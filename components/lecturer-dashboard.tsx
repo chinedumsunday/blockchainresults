@@ -220,12 +220,33 @@ export function LecturerDashboard() {
             </div>
           </div>
 
-          <div>
-            <Label className="text-white">Upload Results File</Label>
-            <Input type="file" accept=".csv,.xlsx,.xls,.docx,.pdf,.json"
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <Label className="text-white">Upload Results File</Label>
+              <Button
+                onClick={() => {
+                  const link = document.createElement("a")
+                  link.href = "/templates/result-template.xlsx"
+                  link.download = "result-template.xlsx"
+                  document.body.appendChild(link)
+                  link.click()
+                  document.body.removeChild(link)
+                }}
+                size="sm"
+                className="bg-green-600 hover:bg-green-700 text-white"
+              >
+                Download Template
+              </Button>
+            </div>
+
+            <Input
+              type="file"
+              accept=".csv,.xlsx,.xls,.docx,.pdf,.json"
               onChange={handleFileUpload}
-              className="bg-gray-700 border-gray-600 text-white" />
+              className="bg-gray-700 border-gray-600 text-white"
+            />
           </div>
+
 
           {resultsData.length > 0 && (
             <Textarea

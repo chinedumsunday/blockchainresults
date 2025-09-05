@@ -141,12 +141,3 @@ This project is licensed under the MIT License.
 
 ---
 
-👤 Author
-
-Chinedum Emmanuel Sunday
-
-📧 chinedumsunday5@gmail.com
-
-🔗 LinkedIn
-
-💻 GitHub
